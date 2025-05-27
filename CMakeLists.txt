@@ -37,7 +37,7 @@ message("Using Python3: ${Python3_EXECUTABLE}")
 find_package(Arrow 20 REQUIRED)
 
 option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
-option(ENABLE_TESTS "enable tests" ON)
+option(ENABLE_TESTS "enable tests" OFF)
 
 
 find_package(Clang 20.1 REQUIRED)
