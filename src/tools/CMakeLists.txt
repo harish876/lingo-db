@@ -16,6 +16,11 @@ add_executable(sql-to-mlir sql-to-mlir.cpp)
 target_link_libraries(sql-to-mlir PUBLIC ${LIBS} MLIRSQLFrontend pg_query::pg_query runtime utility runner scheduler)
 set_target_properties(sql-to-mlir PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
+# pipeql-to-mlir
+add_executable(pipeql-to-mlir pipeql-to-mlir.cpp)
+target_link_libraries(pipeql-to-mlir PUBLIC ${LIBS} MLIRPipeQLFrontend antlr4_static runtime utility runner scheduler)
+set_target_properties(pipeql-to-mlir PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
 # run-mlir
 add_executable(run-mlir run-mlir.cpp)
 target_link_libraries(run-mlir PUBLIC runner runtime utility mlir-support scheduler)
@@ -26,3 +31,8 @@ set_target_properties(run-mlir PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINA
 add_executable(run-sql run-sql.cpp)
 target_link_libraries(run-sql PUBLIC runner runtime utility mlir-support scheduler)
 set_target_properties(run-sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+# run-pipeql
+# add_executable(run-pipeql run-pipeql.cpp)
+# target_link_libraries(run-pipeql PUBLIC runner runtime utility mlir-support scheduler)
+# set_target_properties(run-pipeql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
