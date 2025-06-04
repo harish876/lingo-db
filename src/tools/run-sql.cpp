@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
 
    lingodb::compiler::support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();
-   auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, true);
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, execution::ExecutionDialect::SQL);
    if (const char* numRuns = std::getenv("QUERY_RUNS")) {
       queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
       std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;

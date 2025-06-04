@@ -102,7 +102,15 @@ enum class ExecutionMode {
    GPU = 7, // compile with support for GPUs
    NONE = 8
 };
+
+enum class ExecutionDialect {
+   SQL = 0,
+   PIPEQL = 1,
+   MLIR = 2
+};
+
 std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(ExecutionMode runMode, bool sqlInput);
+std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(ExecutionMode runMode, ExecutionDialect dialect);
 ExecutionMode getExecutionMode();
 
 class QueryExecuter {

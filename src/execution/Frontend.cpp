@@ -1,4 +1,5 @@
 #include "lingodb/execution/Frontend.h"
+// #include "lingodb/compiler/frontend/PipeQL/Parser.h"
 #include "lingodb/compiler/frontend/SQL/Parser.h"
 
 #include "lingodb/compiler/Dialect/DB/IR/DBDialect.h"
@@ -142,10 +143,59 @@ class SQLFrontend : public lingodb::execution::Frontend {
       return parallismAllowed;
    }
 };
+class PipeQLFrontend : public lingodb::execution::Frontend {
+   mlir::MLIRContext context;
+   mlir::OwningOpRef<mlir::ModuleOp> module;
+   bool parallismAllowed;
+   void loadFromString(std::string sql) override {
+      lingodb::execution::initializeContext(context);
+
+      mlir::OpBuilder builder(&context);
+
+      mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
+      lingodb::compiler::frontend::sql::Parser translator(sql, *catalog, moduleOp);
+      builder.setInsertionPointToStart(moduleOp.getBody());
+      auto* queryBlock = new mlir::Block;
+      std::vector<mlir::Type> returnTypes;
+      {
+         mlir::OpBuilder::InsertionGuard guard(builder);
+         builder.setInsertionPointToStart(queryBlock);
+         auto val = translator.translate(builder);
+         if (val.has_value()) {
+            builder.create<lingodb::compiler::dialect::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
+         }
+         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
+      }
+      mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
+      funcOp.getBody().push_back(queryBlock);
+      module = moduleOp;
+      parallismAllowed = false;
+   }
+   void loadFromFile(std::string fileName) override {
+      std::ifstream istream{fileName};
+      if (!istream) {
+         error.emit() << "Error can't load file " << fileName;
+      }
+      std::stringstream buffer;
+      buffer << istream.rdbuf();
+      std::string sqlQuery = buffer.str();
+      loadFromString(sqlQuery);
+   }
+   mlir::ModuleOp* getModule() override {
+      assert(module);
+      return module.operator->();
+   }
+   bool isParallelismAllowed() override {
+      return false;
+   }
+};
 } // namespace
 std::unique_ptr<lingodb::execution::Frontend> lingodb::execution::createMLIRFrontend() {
    return std::make_unique<MLIRFrontend>();
 }
 std::unique_ptr<lingodb::execution::Frontend> lingodb::execution::createSQLFrontend() {
    return std::make_unique<SQLFrontend>();
+}
+std::unique_ptr<lingodb::execution::Frontend> lingodb::execution::createPipeQLFrontend() {
+   return std::make_unique<PipeQLFrontend>();
 }
