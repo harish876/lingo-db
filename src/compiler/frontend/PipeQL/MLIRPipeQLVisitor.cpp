@@ -150,7 +150,7 @@ mlir::Value MLIRPipeQLVisitor::translateSelectOperator(mlir::OpBuilder& builder,
       context.mapAttribute(scope, c.getColumnName(), &attrDef.getColumn()); //todo check for existing and overwrite...
       context.mapAttribute(scope, alias + "." + c.getColumnName(), &attrDef.getColumn());
    }
-   
+
    tree = builder.create<dialect::relalg::BaseTableOp>(
       builder.getUnknownLoc(),
       dialect::tuples::TupleStreamType::get(builder.getContext()),
@@ -237,6 +237,7 @@ antlrcpp::Any MLIRPipeQLVisitor::visitFromClause(PipeQLParser::FromClauseContext
    currentTable = tableName;
    return tableName;
 }
+
 //NOT USING THIS AS OF NOW
 antlrcpp::Any MLIRPipeQLVisitor::visitPipeOperator(PipeQLParser::PipeOperatorContext* ctx) {
    return antlrcpp::Any();
@@ -305,6 +306,7 @@ antlrcpp::Any MLIRPipeQLVisitor::visitLiteral(PipeQLParser::LiteralContext* ctx)
 antlrcpp::Any MLIRPipeQLVisitor::visitAliasClause(PipeQLParser::AliasClauseContext* ctx) {
    return antlrcpp::Any();
 }
+
 //TODO: refactor around this
 antlrcpp::Any MLIRPipeQLVisitor::visitQuery(PipeQLParser::QueryContext* ctx) {
    std::string tableName;
@@ -321,7 +323,6 @@ antlrcpp::Any MLIRPipeQLVisitor::visitQuery(PipeQLParser::QueryContext* ctx) {
    for (auto* stage : ctx->pipeOperator()) {
       visitPipeOperator(stage);
    }
-
    return antlrcpp::Any();
 }
 
