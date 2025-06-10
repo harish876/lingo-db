@@ -1,5 +1,7 @@
 #include "MLIRPipeQLVisitor.h"
 #include "lingodb/catalog/MLIRTypes.h"
+#include "lingodb/compiler/Dialect/TupleStream/TupleStreamOps.h"
+#include "lingodb/compiler/frontend/SQL/Parser.h"
 #include <iostream>
 
 namespace lingodb::compiler::frontend::pipeql {
@@ -42,6 +44,7 @@ std::pair<mlir::Value, TargetInfo> MLIRPipeQLVisitor::translateSelectStmt(mlir::
    if (ctx->fromClause()) {
       try {
          tableName = std::any_cast<std::string>(visitFromClause(ctx->fromClause()));
+         currentTable = tableName;
       } catch (const std::bad_any_cast& e) {
          std::cerr << "Error: Failed to get table name from FROM clause" << std::endl;
          std::cerr << "Details: " << e.what() << std::endl;
@@ -50,35 +53,111 @@ std::pair<mlir::Value, TargetInfo> MLIRPipeQLVisitor::translateSelectStmt(mlir::
    }
 
    for (auto* stage : ctx->pipeOperator()) {
-      visitPipeOperator(stage);
+      if (stage->selectOperator()) {
+         mlir::Value resultTree = translateSelectOperator(builder, stage->selectOperator(), context, scope);
+         tree = resultTree;
+      }
+      if (stage->whereOperator()) {
+         mlir::Value resultTree  = translateWhereOperator(builder, tree, stage->whereOperator(), context, scope);
+         tree = resultTree;
+      }
+   }
+   return std::make_pair(tree, targetInfo);
+}
+
+mlir::Value MLIRPipeQLVisitor::translateWhereOperator(mlir::OpBuilder& builder, mlir::Value tree, PipeQLParser::WhereOperatorContext* ctx, TranslationContext& context, TranslationContext::ResolverScope& scope) {
+   mlir::Block* pred = translatePredicate(builder, ctx, context);
+   auto sel = builder.create<dialect::relalg::SelectionOp>(
+      builder.getUnknownLoc(),
+      dialect::tuples::TupleStreamType::get(builder.getContext()),
+      tree
+   );
+   sel.getPredicate().push_back(pred);
+   tree = sel.getResult();
+   return tree;
+}
+
+mlir::Block* MLIRPipeQLVisitor::translatePredicate(mlir::OpBuilder& builder, PipeQLParser::WhereOperatorContext* ctx, TranslationContext& context) {
+   auto* block = new mlir::Block;
+   mlir::OpBuilder predBuilder(builder.getContext());
+   block->addArgument(dialect::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+   auto tupleScope = context.createTupleScope();
+   context.setCurrentTuple(block->getArgument(0));
+
+   predBuilder.setInsertionPointToStart(block);
+   mlir::Value expr = translateExpression(predBuilder, ctx, context);
+   predBuilder.create<dialect::tuples::ReturnOp>(builder.getUnknownLoc(), expr);
+   return block;
+}
+
+mlir::Value MLIRPipeQLVisitor::translateExpression(mlir::OpBuilder& builder, PipeQLParser::WhereOperatorContext* ctx, TranslationContext& context) {
+   auto loc = builder.getUnknownLoc();
+   auto* booleanExpr = ctx->booleanExpression();
+   std::string whereExpression = booleanExpr->getText();
+   
+   dialect::db::DBCmpPredicate pred;
+   if (whereExpression.find("==") != std::string::npos) {
+      pred = dialect::db::DBCmpPredicate::eq;
+   } else if (whereExpression.find("!=") != std::string::npos) {
+      pred = dialect::db::DBCmpPredicate::neq;
+   } else if (whereExpression.find("<=") != std::string::npos) {
+      pred = dialect::db::DBCmpPredicate::lte;
+   } else if (whereExpression.find(">=") != std::string::npos) {
+      pred = dialect::db::DBCmpPredicate::gte;
+   } else if (whereExpression.find("<") != std::string::npos) {
+      pred = dialect::db::DBCmpPredicate::lt;
+   } else if (whereExpression.find(">") != std::string::npos) {
+      pred = dialect::db::DBCmpPredicate::gt;
+   } else {
+      return mlir::Value();
    }
 
-   auto maybeRel = catalog.getTypedEntry<lingodb::catalog::TableCatalogEntry>(tableName);
-   std::string alias = tableName;
+   auto* columnExpr = booleanExpr->expression(0); // Column name
+   auto* expr = booleanExpr->expression(1); // Value to compare
+
+   std::string attrName = columnExpr->getText();
+   int exprValue = std::stoi(expr->getText()); // handle exception here
+
+   mlir::Value left, right;
+   const auto* attr = context.getAttribute(attrName);
+   left = builder.create<dialect::tuples::GetColumnOp>(builder.getUnknownLoc(), attr->type, attrManager.createRef(attr), context.getCurrentTuple());
+   right = builder.create<dialect::db::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(exprValue));
+   auto ct = sql::SQLTypeInference::toCommonBaseTypes(builder, {left, right});
+   return builder.create<dialect::db::CmpOp>(
+      builder.getUnknownLoc(),
+      pred,
+      ct[0],
+      ct[1]);
+}
+
+mlir::Value MLIRPipeQLVisitor::translateSelectOperator(mlir::OpBuilder& builder, PipeQLParser::SelectOperatorContext* ctx, TranslationContext& context, TranslationContext::ResolverScope& scope) {
+   visitSelectOperator(ctx);
+
+   mlir::Value tree;
+   auto maybeRel = catalog.getTypedEntry<lingodb::catalog::TableCatalogEntry>(currentTable);
+   std::string alias = currentTable;
    auto rel = maybeRel.value();
 
    //TODO: check why unique scope gives user_u_1
    // char lastCharacter = alias.back();
    // std::string scopeName = attrManager.getUniqueScope(alias + (isdigit(lastCharacter) ? "_" : ""));
-   std::string scopeName = tableName;
 
    std::vector<mlir::NamedAttribute> columns;
    for (auto c : rel->getColumns()) {
-      auto attrDef = attrManager.createDef(scopeName, c.getColumnName());
+      auto attrDef = attrManager.createDef(currentTable, c.getColumnName());
       attrDef.getColumn().type = createTypeForColumn(builder.getContext(), c);
       columns.push_back(builder.getNamedAttr(c.getColumnName(), attrDef));
       context.mapAttribute(scope, c.getColumnName(), &attrDef.getColumn()); //todo check for existing and overwrite...
       context.mapAttribute(scope, alias + "." + c.getColumnName(), &attrDef.getColumn());
    }
+   
    tree = builder.create<dialect::relalg::BaseTableOp>(
       builder.getUnknownLoc(),
       dialect::tuples::TupleStreamType::get(builder.getContext()),
-      tableName,
+      currentTable,
       builder.getDictionaryAttr(columns));
 
-   std::cout << "[Line 77] State of tree: \n";
-   tree.dump();
-   return std::make_pair(tree, targetInfo);
+   return tree;
 }
 
 antlrcpp::Any MLIRPipeQLVisitor::visitSelectOperator(PipeQLParser::SelectOperatorContext* ctx) {
@@ -127,27 +206,19 @@ antlrcpp::Any MLIRPipeQLVisitor::visitSelectOperator(PipeQLParser::SelectOperato
    return antlrcpp::Any();
 }
 
-//TODO: refactor around this
-antlrcpp::Any MLIRPipeQLVisitor::visitQuery(PipeQLParser::QueryContext* ctx) {
-   std::string tableName;
-   if (ctx->fromClause()) {
-      try {
-         tableName = std::any_cast<std::string>(visitFromClause(ctx->fromClause()));
-      } catch (const std::bad_any_cast& e) {
-         std::cerr << "Error: Failed to get table name from FROM clause" << std::endl;
-         std::cerr << "Details: " << e.what() << std::endl;
-         return antlrcpp::Any();
-      }
-   }
-
-   for (auto* stage : ctx->pipeOperator()) {
-      visitPipeOperator(stage);
-   }
-
-   return antlrcpp::Any();
-}
-
 antlrcpp::Any MLIRPipeQLVisitor::visitWhereOperator(PipeQLParser::WhereOperatorContext* ctx) {
+   auto* booleanExpr = ctx->booleanExpression();
+   std::string whereExpression = booleanExpr->getText();
+
+   if (whereExpression.find("==") != std::string::npos) {
+      auto* columnExpr = booleanExpr->expression(0); // Column name
+      auto* expr = booleanExpr->expression(1); // Upper bound
+
+      std::string column = columnExpr->getText();
+      int exprValue = std::stoi(expr->getText());
+      std::cout << "Column Name: " << column << " Expression Value: " << exprValue
+                << std::endl;
+   }
    return antlrcpp::Any();
 }
 
@@ -166,11 +237,8 @@ antlrcpp::Any MLIRPipeQLVisitor::visitFromClause(PipeQLParser::FromClauseContext
    currentTable = tableName;
    return tableName;
 }
-
+//NOT USING THIS AS OF NOW
 antlrcpp::Any MLIRPipeQLVisitor::visitPipeOperator(PipeQLParser::PipeOperatorContext* ctx) {
-   if (ctx->selectOperator()) {
-      visitSelectOperator(ctx->selectOperator());
-   }
    return antlrcpp::Any();
 }
 
@@ -235,6 +303,25 @@ antlrcpp::Any MLIRPipeQLVisitor::visitLiteral(PipeQLParser::LiteralContext* ctx)
 }
 
 antlrcpp::Any MLIRPipeQLVisitor::visitAliasClause(PipeQLParser::AliasClauseContext* ctx) {
+   return antlrcpp::Any();
+}
+//TODO: refactor around this
+antlrcpp::Any MLIRPipeQLVisitor::visitQuery(PipeQLParser::QueryContext* ctx) {
+   std::string tableName;
+   if (ctx->fromClause()) {
+      try {
+         tableName = std::any_cast<std::string>(visitFromClause(ctx->fromClause()));
+      } catch (const std::bad_any_cast& e) {
+         std::cerr << "Error: Failed to get table name from FROM clause" << std::endl;
+         std::cerr << "Details: " << e.what() << std::endl;
+         return antlrcpp::Any();
+      }
+   }
+
+   for (auto* stage : ctx->pipeOperator()) {
+      visitPipeOperator(stage);
+   }
+
    return antlrcpp::Any();
 }
 

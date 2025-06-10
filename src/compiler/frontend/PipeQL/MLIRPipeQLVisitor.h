@@ -17,7 +17,13 @@ class MLIRPipeQLVisitor : public PipeQLBaseVisitor {
       : catalog(catalog), attrManager(attrManager), targetInfo(targetInfo) {}
 
    void debugPrint();
+
+   //WRAPPER FUNCTIONS
    std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, PipeQLParser::QueryContext* ctx, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   mlir::Value translateWhereOperator(mlir::OpBuilder& builder, mlir::Value tree, PipeQLParser::WhereOperatorContext* ctx, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   mlir::Block* translatePredicate(mlir::OpBuilder& builder, PipeQLParser::WhereOperatorContext* ctx, TranslationContext& context);
+   mlir::Value translateExpression(mlir::OpBuilder& builder, PipeQLParser::WhereOperatorContext* ctx, TranslationContext& context);
+   mlir::Value translateSelectOperator(mlir::OpBuilder& builder, PipeQLParser::SelectOperatorContext* ctx, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
    antlrcpp::Any visitQuery(PipeQLParser::QueryContext* ctx) override;
    antlrcpp::Any visitSelectOperator(PipeQLParser::SelectOperatorContext* ctx) override;
@@ -42,11 +48,11 @@ class MLIRPipeQLVisitor : public PipeQLBaseVisitor {
    antlrcpp::Any visitAliasClause(PipeQLParser::AliasClauseContext* ctx) override;
 
    mlir::Type createBaseTypeFromColumnType(mlir::MLIRContext* context, const lingodb::catalog::Type& t);
-    //   return t.getMLIRTypeCreator()->createType(context);
+   //   return t.getMLIRTypeCreator()->createType(context);
 
    mlir::Type createTypeForColumn(mlir::MLIRContext* context, const lingodb::catalog::Column& colDef);
-    //   mlir::Type baseType = createBaseTypeFromColumnType(context, colDef.getLogicalType());
-    //   return colDef.getIsNullable() ? db::NullableType::get(context, baseType) : baseType;
+   //   mlir::Type baseType = createBaseTypeFromColumnType(context, colDef.getLogicalType());
+   //   return colDef.getIsNullable() ? db::NullableType::get(context, baseType) : baseType;
 
    private:
    enum class SelectType {

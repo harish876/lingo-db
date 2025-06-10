@@ -14,6 +14,7 @@ add_dependencies(MLIRPipeQLFrontend
     ec-rt-defs 
     antlr4_static
     pipeql
+    MLIRSQLFrontend
 )
 
 target_link_libraries(MLIRPipeQLFrontend 
@@ -26,4 +27,5 @@ target_link_libraries(MLIRPipeQLFrontend
     catalog
     antlr4_static
     pipeql
+    MLIRSQLFrontend
 ) 

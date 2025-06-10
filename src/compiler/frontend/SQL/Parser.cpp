@@ -588,6 +588,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    }
    // FROM
    mlir::Value tree = translateFromClause(builder, stmt, context, scope);
+   std::cout << "===FROM CLAUSE: Start===" << std::endl;
+   tree.dump();
+   std::cout << "===FROM CLAUSE: End  ===" << std::endl;
    if (!tree) {
       auto dummyAttr = attrManager.createDef(attrManager.getUniqueScope("dummyScope"), "dummyName");
       dummyAttr.getColumn().type = builder.getI32Type();
@@ -605,6 +608,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    //region of interest
    auto [tree_, targetInfo] = translateSelectionTargetList(builder, stmt->group_clause_, stmt->having_clause_, stmt->target_list_, stmt->sort_clause_, stmt->distinct_clause_, tree, context, scope);
    tree = tree_;
+   std::cout << "===Selection CLAUSE: Start===" << std::endl;
+   tree.dump();
+   std::cout << "===Selection CLAUSE: End  ===" << std::endl;
    for (auto x : targetInfo.namedResults) {
       if (!x.first.empty()) {
          context.mapAttribute(scope, x.first, x.second);
@@ -1025,7 +1031,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
          break;
       }
       case T_ColumnRef: {
-         const auto* attr = resolveColRef(node, context);
+         const auto* attr = resolveColRef(node, context); //
          return builder.create<tuples::GetColumnOp>(builder.getUnknownLoc(), attr->type, attrManager.createRef(attr), context.getCurrentTuple());
          break;
       }
@@ -1315,11 +1321,10 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
                }
                localTableType = subop::LocalTableType::get(
                   builder.getContext(),
-                   subop::StateMembersAttr::get(builder.getContext(), 
-                   builder.getArrayAttr(colMemberNames), 
-                   builder.getArrayAttr(colTypes)), 
-                   builder.getArrayAttr(names)
-               );
+                  subop::StateMembersAttr::get(builder.getContext(),
+                                               builder.getArrayAttr(colMemberNames),
+                                               builder.getArrayAttr(colTypes)),
+                  builder.getArrayAttr(names));
 
                mlir::Value result = builder.create<relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
                builder.create<relalg::QueryReturnOp>(builder.getUnknownLoc(), result);
@@ -1916,7 +1921,6 @@ std::tuple<mlir::Value, std::unordered_map<std::string, tuples::Column*>> fronte
 }
 std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, List* distinctClause, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    auto createMap = [this](mlir::OpBuilder& builder, std::unordered_map<FakeNode*, Node*>& toMap, TranslationContext& context, mlir::Value tree, TranslationContext::ResolverScope& scope) -> mlir::Value {
-      std::cout << "at createMap" << std::endl;
       if (toMap.empty()) return tree;
       auto* block = new mlir::Block;
       static size_t mapId = 0;
@@ -2091,8 +2095,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       }
    }
    tree = createMap(builder, replaceState.evalBeforeAggr, context, tree, scope);
-   std::cout << "[Line 2092] State of query tree: \n";
-   tree.dump();
 
    std::vector<mlir::Attribute> groupByAttrs;
    std::unordered_map<std::string, mlir::Attribute> groupedExpressions;
@@ -2240,8 +2242,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       tree = sel.getResult();
    }
    tree = createMap(builder, replaceState.evalBeforeWindowFunc, context, tree, scope);
-   std::cout << "[Line 2238] State of query tree: \n";
-   tree.dump();
 
    if (!replaceState.windowFunctions.empty()) {
       std::cout << "at window" << std::endl;
@@ -2371,7 +2371,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    std::unordered_map<FakeNode*, Node*> mapForTargetList;
    std::vector<std::pair<std::string, std::variant<const tuples::Column*, FakeNode*>>> targets;
    for (auto* cell = targetList->head; cell != nullptr; cell = cell->next) {
-      std::cout << "at targetList" << std::endl;
       auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
       if (node->type == T_ResTarget) {
          auto* resTarget = reinterpret_cast<ResTarget*>(node);
@@ -2446,8 +2445,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    }
 
    tree = createMap(builder, mapForTargetList, context, tree, scope);
-   std::cout << "[Line 2447] State of query tree: \n";
-   tree.dump();
 
    for (auto target : targets) {
       if (std::holds_alternative<const tuples::Column*>(target.second)) {
@@ -2458,7 +2455,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       }
    }
    if (distinctClause) {
-      std::cout << "at distinct" << std::endl;
       assert(distinctClause->length == 1);
       std::vector<mlir::Attribute> columns;
       for (auto x : targetInfo.namedResults) {
@@ -2469,7 +2465,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
 
    // ORDER BY
    if (sortClause) {
-      std::cout << "at sort" << std::endl;
       auto sortScope = context.createResolverScope();
       for (auto x : targetInfo.namedResults) {
          if (!x.first.empty()) {
@@ -2544,8 +2539,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       }
       tree = builder.create<relalg::SortOp>(builder.getUnknownLoc(), tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(mapping));
    }
-   std::cout << "[Line 2545] State of query tree: \n";
-   tree.dump();
    return std::make_pair(tree, targetInfo);
 }
 mlir::Type frontend::sql::Parser::createBaseTypeFromColumnType(mlir::MLIRContext* context, const lingodb::catalog::Type& t) {
