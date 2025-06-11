@@ -32,7 +32,21 @@ add_executable(run-sql run-sql.cpp)
 target_link_libraries(run-sql PUBLIC runner runtime utility mlir-support scheduler)
 set_target_properties(run-sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
+# TODO: Figure out linking issue.
 # run-pipeql
 # add_executable(run-pipeql run-pipeql.cpp)
 # target_link_libraries(run-pipeql PUBLIC runner runtime utility mlir-support scheduler)
 # set_target_properties(run-pipeql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+add_executable(query-table query-table.cpp)
+target_link_libraries(query-table PUBLIC 
+    ${LIBS}
+    runtime 
+    utility 
+    scheduler 
+    arrow 
+    catalog
+    runner
+    mlir-support
+)
+set_target_properties(query-table PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
