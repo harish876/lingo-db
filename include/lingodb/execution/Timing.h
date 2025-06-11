@@ -6,6 +6,9 @@
 #include <iostream>
 #include <unordered_map>
 #include <vector>
+#include <string>
+#include <algorithm>
+
 namespace lingodb::execution {
 class TimingProcessor {
    public:
@@ -13,6 +16,7 @@ class TimingProcessor {
    virtual void process() = 0;
    virtual ~TimingProcessor() {}
 };
+
 class TimingPrinter : public TimingProcessor {
    std::unordered_map<std::string, double> timing;
    std::string queryName;
@@ -25,32 +29,88 @@ class TimingPrinter : public TimingProcessor {
          queryName = queryFile;
       }
    }
+
    void addTiming(const std::unordered_map<std::string, double>& timing) override {
       this->timing.insert(timing.begin(), timing.end());
    }
+
    void process() override {
+      // Calculate total excluding the executionTime
       double total = 0.0;
       for (auto [name, t] : timing) {
-         total += t;
-      }
-      timing["total"] = total;
-      std::vector<std::string> printOrder = {"QOpt", "lowerRelAlg", "lowerSubOp", "lowerDB", "lowerDSA", "lowerToLLVM", "toLLVMIR", "llvmOptimize", "llvmCodeGen", "executionTime", "total"};
-      std::cout << std::endl
-                << std::endl;
-      std::cout << std::setw(10) << "name";
-      for (auto n : printOrder) {
-         std::cout << std::setw(15) << n;
-      }
-      std::cout << std::endl;
-      std::cout << std::setw(10) << queryName;
-      for (auto n : printOrder) {
-         if (timing.contains(n)) {
-            std::cout << std::setw(15) << timing[n];
-         } else {
-            std::cout << std::setw(15) << "";
+         if (name != "executionTime") {
+            total += t;
          }
       }
+      // Add executionTime to total
+      if (timing.contains("executionTime")) {
+         total += timing["executionTime"];
+      }
+      timing["total"] = total;
+
+      // Define column order and widths
+      std::vector<std::string> printOrder = {
+         "QOpt", "lowerRelAlg", "lowerSubOp", "lowerDB", "lowerDSA", 
+         "lowerToLLVM", "toLLVMIR", "llvmOptimize", "llvmCodeGen", 
+         "executionTime", "total"
+      };
+      
+      // Calculate column widths
+      std::unordered_map<std::string, size_t> colWidths;
+      colWidths["name"] = std::max(queryName.length(), size_t(20));
+      
+      for (const auto& col : printOrder) {
+         colWidths[col] = col.length();
+         if (timing.contains(col)) {
+            std::stringstream ss;
+            ss << std::fixed << std::setprecision(3) << timing[col];
+            colWidths[col] = std::max(colWidths[col], ss.str().length());
+         }
+      }
+
+      // Print header
+      std::cout << "\n+" << std::string(colWidths["name"], '-') << "+";
+      for (size_t i = 0; i < printOrder.size(); ++i) {
+         std::cout << std::string(colWidths[printOrder[i]], '-');
+         if (i < printOrder.size() - 1) std::cout << "+";
+      }
+      std::cout << "+\n";
+
+      // Print column names
+      std::cout << "|" << std::setw(colWidths["name"]) << "name" << "|";
+      for (const auto& col : printOrder) {
+         std::cout << std::setw(colWidths[col]) << col << "|";
+      }
+      std::cout << "\n";
+
+      // Print separator
+      std::cout << "+" << std::string(colWidths["name"], '-') << "+";
+      for (size_t i = 0; i < printOrder.size(); ++i) {
+         std::cout << std::string(colWidths[printOrder[i]], '-');
+         if (i < printOrder.size() - 1) std::cout << "+";
+      }
+      std::cout << "+\n";
+
+      // Print data row
+      std::cout << "|" << std::setw(colWidths["name"]) << queryName << "|";
+      for (const auto& col : printOrder) {
+         if (timing.contains(col)) {
+            std::cout << std::fixed << std::setprecision(3) << std::setw(colWidths[col]) << timing[col] << "|";
+         } else {
+            std::cout << std::setw(colWidths[col]) << "" << "|";
+         }
+      }
+      std::cout << "\n";
+
+      // Print footer
+      std::cout << "+" << std::string(colWidths["name"], '-') << "+";
+      for (size_t i = 0; i < printOrder.size(); ++i) {
+         std::cout << std::string(colWidths[printOrder[i]], '-');
+         if (i < printOrder.size() - 1) std::cout << "+";
+      }
+      std::cout << "+\n\n";
    }
 };
 } // namespace lingodb::execution
 #endif //LINGODB_EXECUTION_TIMING_H
+

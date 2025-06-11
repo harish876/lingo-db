@@ -39,8 +39,15 @@ set_target_properties(run-sql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINAR
 # set_target_properties(run-pipeql PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 add_executable(query-table query-table.cpp)
+target_include_directories(query-table
+    PUBLIC
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/vendored/PipeQL/src/include
+    ${ANTLR4_INCLUDE_DIRS}
+)
 target_link_libraries(query-table PUBLIC 
     ${LIBS}
+    antlr4_static
     runtime 
     utility 
     scheduler 
@@ -48,5 +55,6 @@ target_link_libraries(query-table PUBLIC
     catalog
     runner
     mlir-support
+    pipeql
 )
 set_target_properties(query-table PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")

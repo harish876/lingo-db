@@ -518,7 +518,6 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
 mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, RangeVar* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    std::string relation = stmt->relname_;
    std::string alias = relation;
-   std::cout << "[Line 521] relation: " << relation << std::endl;
    if (stmt->alias_ && stmt->alias_->type_ == T_Alias && stmt->alias_->aliasname_) {
       alias = stmt->alias_->aliasname_;
    }
@@ -588,9 +587,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    }
    // FROM
    mlir::Value tree = translateFromClause(builder, stmt, context, scope);
-   std::cout << "===FROM CLAUSE: Start===" << std::endl;
-   tree.dump();
-   std::cout << "===FROM CLAUSE: End  ===" << std::endl;
    if (!tree) {
       auto dummyAttr = attrManager.createDef(attrManager.getUniqueScope("dummyScope"), "dummyName");
       dummyAttr.getColumn().type = builder.getI32Type();
@@ -608,9 +604,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    //region of interest
    auto [tree_, targetInfo] = translateSelectionTargetList(builder, stmt->group_clause_, stmt->having_clause_, stmt->target_list_, stmt->sort_clause_, stmt->distinct_clause_, tree, context, scope);
    tree = tree_;
-   std::cout << "===Selection CLAUSE: Start===" << std::endl;
-   tree.dump();
-   std::cout << "===Selection CLAUSE: End  ===" << std::endl;
    for (auto x : targetInfo.namedResults) {
       if (!x.first.empty()) {
          context.mapAttribute(scope, x.first, x.second);
