@@ -6,12 +6,15 @@
 #include "lingodb/compiler/Dialect/util/UtilDialect.h"
 #include "lingodb/compiler/frontend/PipeQL/Parser.h"
 #include "lingodb/runtime/Session.h"
+#include <chrono>
 
 #include "mlir/IR/BuiltinDialect.h"
 
 namespace {
 using namespace lingodb::compiler::dialect;
 void printMLIR(std::string sql, std::shared_ptr<lingodb::catalog::Catalog> catalog) {
+   auto start = std::chrono::high_resolution_clock::now();
+
    mlir::MLIRContext context;
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
@@ -49,6 +52,11 @@ void printMLIR(std::string sql, std::shared_ptr<lingodb::catalog::Catalog> catal
 
    mlir::OpPrintingFlags flags;
    flags.assumeVerified();
+   
+   auto end = std::chrono::high_resolution_clock::now();
+   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+   std::cerr << "MLIR conversion time: " << duration.count() / 1000.0 << " milliseconds" << std::endl;
+
    moduleOp->print(llvm::outs(), flags);
    moduleOp.erase();
 }

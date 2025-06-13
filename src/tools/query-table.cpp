@@ -76,23 +76,26 @@ class InterpreterPipeQLVisitor : public PipeQLBaseVisitor {
          columns.push_back(column);
       }
 
-      if (!columns.empty()) {
-         std::vector<std::shared_ptr<arrow::Field>> fields;
-         std::vector<std::shared_ptr<arrow::Array>> arrays;
-
-         for (const auto& col : columns) {
-            auto colIndex = currentTable->schema()->GetFieldIndex(col);
-            if (colIndex == -1) continue;
-
-            fields.push_back(currentTable->schema()->field(colIndex));
-            auto chunkedArray = currentTable->column(colIndex);
-            arrays.push_back(chunkedArray->chunk(0));
-         }
-
-         auto schema = arrow::schema(fields);
-         currentTable = arrow::Table::Make(schema, arrays);
+      // Handle * projection
+      if (columns.empty() || (columns.size() == 1 && columns[0] == "*")) {
+         // Return the table as is, with all columns
+         return currentTable;
       }
 
+      std::vector<std::shared_ptr<arrow::Field>> fields;
+      std::vector<std::shared_ptr<arrow::Array>> arrays;
+
+      for (const auto& col : columns) {
+         auto colIndex = currentTable->schema()->GetFieldIndex(col);
+         if (colIndex == -1) continue;
+
+         fields.push_back(currentTable->schema()->field(colIndex));
+         auto chunkedArray = currentTable->column(colIndex);
+         arrays.push_back(chunkedArray->chunk(0));
+      }
+
+      auto schema = arrow::schema(fields);
+      currentTable = arrow::Table::Make(schema, arrays);
       return currentTable;
    }
 
@@ -549,6 +552,7 @@ int main(int argc, char** argv) {
    std::string query = argv[2];
 
    try {
+      auto start = std::chrono::high_resolution_clock::now();
       auto session = runtime::Session::createSession(dbDir, true);
       auto catalog = session->getCatalog();
 
@@ -568,7 +572,6 @@ int main(int argc, char** argv) {
       // Create visitor and execute query
       interpreter::pipeql::InterpreterPipeQLVisitor visitor(*catalog, dbDir);
       
-      auto start = std::chrono::high_resolution_clock::now();
       auto result = visitor.visitQuery(ast);
       auto end = std::chrono::high_resolution_clock::now();
       auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);

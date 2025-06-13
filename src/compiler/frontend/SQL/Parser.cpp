@@ -2390,7 +2390,6 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                      break;
                   }
                   case T_A_Star: {
-                     std::cout << "at star node" << std::endl;
                      std::unordered_set<const tuples::Column*> handledAttrs;
                      for (auto p : context.getAllDefinedColumns()) {
                         if (!handledAttrs.contains(p.second)) {

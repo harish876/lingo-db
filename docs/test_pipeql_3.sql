@@ -1,0 +1,1 @@
+FROM users |> SELECT * |> WHERE age > 18
